@@ -219,7 +219,7 @@ class BaseBMModel(ABC):
     uitb.bm_models.effort_models.
 
     Args:
-      specs: Specifications of the effort model, in format of
+ö      specs: Specifications of the effort model, in format of
         {"cls": "name-of-class", "kwargs": {"kw1": value1, "kw2": value2}}}
       dt: Elapsed time between two consecutive simulation steps
 
@@ -271,16 +271,23 @@ class BaseBMModel(ABC):
     """
 
     # Parse xml file
+    #Wird von der Subklasse ausgeführt -> gibt das bm_model.xml zurück
+    #Parsed das bm_model.xml zu einem Tree
     bm_tree = ET.parse(cls.get_xml_file())
+    
+    #Holt sich die Wurzel des biomechanischen Modell -> <mujoco model="template">...</mujoco>
     bm_root = bm_tree.getroot()
 
     # Get simulator root
+    # Holt sich die Wurzel der task simulation
     simulator_root = simulator_tree.getroot()
 
     # Add defaults
+    
     ETutils.copy_or_append("default", bm_root, simulator_root)
 
     # Add assets, except skybox
+    #Kopiert die Kindknoten des bm-Root-Knotens in die simulator datei
     ETutils.copy_children("asset", bm_root, simulator_root,
                           exclude={"tag": "texture", "attrib": "type", "name": "skybox"})
 

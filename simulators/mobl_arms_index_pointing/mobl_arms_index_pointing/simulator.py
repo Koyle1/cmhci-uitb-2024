@@ -35,20 +35,44 @@ class Simulator(gym.Env):
 
   @classmethod
   def get_class(cls, *args):
-    """ Returns a class from given strings. The last element in args should contain the class name. """
-    # TODO check for incorrect module names etc
+    """
+    Returns a class from given strings. The last element in args should contain the class name.
+    Args:
+        cls: An object that provides a `get_module` method for importing modules.
+        *args: A sequence of strings representing the module(s) and the class name.
+               The last element is the class name, and the preceding elements (if any)
+               form the module hierarchy.
+    Returns:
+        The class object corresponding to the given class name and module path.
+    """
+
+    # Extract the module hierarchy from all but the last string in `args`.
     modules = ".".join(args[:-1])
+
+    # Check if the class name (last element in `args`) contains a module path (e.g., "subpackage.ClassName").
     if "." in args[-1]:
-      splitted = args[-1].split(".")
-      if modules == "":
-        modules = ".".join(splitted[:-1])
-      else:
-        modules += "." + ".".join(splitted[:-1])
-      cls_name = splitted[-1]
+        # Split the last element into sub-paths and class name.
+        splitted = args[-1].split(".")
+        
+        if modules == "":
+            # If no modules were provided earlier, take the module path from `splitted`.
+            modules = ".".join(splitted[:-1])
+        else:
+            # Append the sub-paths from `splitted` to the existing module path.
+            modules += "." + ".".join(splitted[:-1])
+        
+        # Extract the class name from the last part of the split.
+        cls_name = splitted[-1]
     else:
-      cls_name = args[-1]
+        # If the class name doesn't include a module path, take it as is.
+        cls_name = args[-1]
+
+    # Use the `get_module` method of `cls` to dynamically import the module.
     module = cls.get_module(modules)
+
+    # Retrieve the class object from the imported module by its name.
     return getattr(module, cls_name)
+
 
   @classmethod
   def get_module(cls, *args):
@@ -107,9 +131,9 @@ class Simulator(gym.Env):
     cls._clone(simulator_folder, config["package_name"])
 
     # Load task class
-    task_cls = cls.get_class("tasks", config["simulation"]["task"]["cls"])
-    task_cls.clone(simulator_folder, config["package_name"], app_executable=config["simulation"]["task"].get("kwargs", {}).get("unity_executable", None))
-    simulation = task_cls.initialise(config["simulation"]["task"].get("kwargs", {}))
+    task_cls = cls.get_class("tasks", config["simulation"]["task"]["cls"]) #gets the class (e.g index_pointing)
+    task_cls.clone(simulator_folder, config["package_name"], app_executable=config["simulation"]["task"].get("kwargs", {}).get("unity_executable", None)) #Function in base.py of tasks
+    simulation = task_cls.initialise(config["simulation"]["task"].get("kwargs", {})) #Returns ElementTree
 
     # Set some compiler options
     # TODO: would make more sense to have a separate "environment" class / xml file that defines all these defaults,
@@ -117,15 +141,26 @@ class Simulator(gym.Env):
     #  be integrated into that object
     compiler_defaults = {"inertiafromgeom": "auto", "balanceinertia": "true", "boundmass": "0.001",
                          "boundinertia": "0.001", "inertiagrouprange": "0 1"}
-    compiler = simulation.find("compiler")
+    
+    #In task.xml for chosen task: find compailer (usually somewhere at the start) e.g <compiler angle="radian"/>
+    compiler = simulation.find("compiler") 
+
+    #Wurde der Compiler definiert?
     if compiler is None:
+    #Nein -> Dann erstelle einen neuen Compiler in der xml basierend auf den compiler_defaults
       ET.SubElement(simulation, "compiler", compiler_defaults)
     else:
+    #Ja -> überschreibe die attribute des Compilers mit den default compiler werten
       compiler.attrib.update(compiler_defaults)
 
     # Load biomechanical model class
+    #Schritt 1: Holt sich die bm_models Klasse aus der config definition
     bm_cls = cls.get_class("bm_models", config["simulation"]["bm_model"]["cls"])
+
+    #Schritt 2: Clont das biomechanische Modell in den Simulator ordner
     bm_cls.clone(simulator_folder, config["package_name"])
+
+    #Schritt 3: 
     bm_cls.insert(simulation)
 
     # Add perception modules
@@ -804,6 +839,8 @@ class Simulator(gym.Env):
     state.update(self.perception.get_state(self._model, self._data))
 
     return state
+
+
 
   def close(self, **kwargs):
     """ Perform any necessary clean up.

@@ -15,6 +15,7 @@ import argparse
 
 if __name__=="__main__":
 
+  print("Successfully started programm/training!")
   parser = argparse.ArgumentParser(description='Train an agent.')
   parser.add_argument('config_file_path', type=str,
                       help='path to the config file')
@@ -116,6 +117,8 @@ if __name__=="__main__":
 
   # Start the training
   # rl_model.learn(WandbCallback(verbose=2))
+  print("Starting training!")
   rl_model.learn(WandbCallback(verbose=2),
                  with_evaluation=with_evaluation, eval_freq=eval_freq, eval_info_keywords=eval_info_keywords)
+  print("Taining complete!")
   run.finish()

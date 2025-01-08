@@ -157,6 +157,7 @@ class BaseTask(ABC):
   @classmethod
   def get_xml_file(cls):
     """ Overwrite if you want to call the task xml file something else than 'task.xml'. """
+    #Will be used from subclass -> returns task.xml for building simulation 
     return os.path.join(parent_path(inspect.getfile(cls)), "task.xml")
 
   @classmethod
@@ -183,33 +184,42 @@ class BaseTask(ABC):
         is used by the task instance (e.g., a Unity app)
     """
 
-    # Create 'tasks' folder
+    # Step 1: Create the 'tasks' folder inside the simulator package
+    # This folder will contain the cloned files for the task class
     dst = os.path.join(simulator_folder, package_name, "tasks")
-    os.makedirs(dst, exist_ok=True)
+    os.makedirs(dst, exist_ok=True)  # Create the folder if it does not exist already
 
-    # Copy this file and __init__.py
+    # Step 2: Copy the current Python file (base file) to the destination 'tasks' folder
+    # 'base_file' refers to the script file where this method is defined
     base_file = pathlib.Path(__file__)
-    shutil.copyfile(base_file, os.path.join(dst, base_file.name))
+    shutil.copyfile(base_file, os.path.join(dst, base_file.name))  # Copy the file to the destination folder
 
-    # Create an __init__.py file with the relevant import
-    modules = cls.__module__.split(".")
+    # Step 3: Create an '__init__.py' file in the 'tasks' folder to initialize the package
+    # This file contains the import statement for the current class
+    modules = cls.__module__.split(".")  # Get the module path (e.g., 'simulator.tasks')
     with open(os.path.join(dst, "__init__.py"), "w") as file:
-      file.write("from ." + ".".join(modules[2:]) + " import " + cls.__name__)
+        # Write an import statement to import the current class from its module
+        file.write("from ." + ".".join(modules[2:]) + " import " + cls.__name__)
 
-    # Copy env folder (without apps subdirectory)
-    src = parent_path(inspect.getfile(cls))
-    # shutil.copytree(src, os.path.join(dst, src.stem), dirs_exist_ok=True)
+    # Step 4: Copy the entire directory (excluding the 'apps' subdirectory)
+    # This copies all necessary files in the directory where the current class is defined
+    src = parent_path(inspect.getfile(cls))  # Get the directory of the current class's file
     shutil.copytree(src, os.path.join(dst, src.stem), dirs_exist_ok=True, ignore=shutil.ignore_patterns('apps'))
+    # The `ignore` parameter ensures that the 'apps' subdirectory is not copied
 
-    # Copy application subdir (optional)
+    # Step 5: Optionally copy the application executable subdirectory (e.g., Unity executable)
+    # If an app executable is provided, it is copied from the source path to the destination
     if app_executable is not None:
-      src_app = parent_path(os.path.join(src, app_executable))
-      shutil.copytree(src_app, os.path.join(dst, src.stem, os.path.dirname(app_executable)), dirs_exist_ok=True)
+        # Get the path of the executable and its directory
+        src_app = parent_path(os.path.join(src, app_executable))
+        # Copy the executable directory to the destination
+        shutil.copytree(src_app, os.path.join(dst, src.stem, os.path.dirname(app_executable)), dirs_exist_ok=True)
 
-    # Copy assets if they exist
+    # Step 6: Copy the 'assets' folder if it exists
+    # This copies any assets (like textures, models, etc.) needed for the simulation
     if os.path.isdir(os.path.join(src, "assets")):
-      shutil.copytree(os.path.join(src, "assets"), os.path.join(simulator_folder, package_name, "assets"),
-                      dirs_exist_ok=True)
+        shutil.copytree(os.path.join(src, "assets"), os.path.join(simulator_folder, package_name, "assets"),
+                        dirs_exist_ok=True)  # Copy the assets to the new folder
 
   @classmethod
   def initialise(cls, task_kwargs):
@@ -223,6 +233,7 @@ class BaseTask(ABC):
 
     """
     # Parse xml file and return the tree
+    # Reutrns the tree of the task.xml file needed for the simulation
     return ET.parse(cls.get_xml_file())
 
   def close(self, **kwargs):

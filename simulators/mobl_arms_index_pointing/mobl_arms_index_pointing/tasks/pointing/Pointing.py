@@ -1,13 +1,72 @@
 import numpy as np
 import mujoco
+import math #added for sinus and cosinus calculations
+import pandas as pd #added for data management
+import os #added for saving the file
 
 from .reward_functions import NegativeExpDistanceWithHitBonus
 from ..base import BaseTask
 
 class Pointing(BaseTask):
 
+  #Data Management / added by me
+  #--------------------------------------------------------------------------------
+  def _set_start_data(self, position):
+      if self.iteration == 0 or self.iteration == (self._max_trials+1):
+          return
+      self.df.loc[self.iteration, 'start_x'] = position[0]
+      self.df.loc[self.iteration, 'start_y'] = position[1]
+      self.df.loc[self.iteration, 'start_z'] = position[2]
+      
+
+  def _set_end_data_location(self, position, size):
+      if self.iteration == 0 or self.iteration == (self._max_trials+1):
+          return
+      self.df.loc[self.iteration, 'timestamp_start'] = pd.Timestamp.now()
+      self.df.loc[self.iteration, 'end_x'] = position[0]
+      self.df.loc[self.iteration, 'end_y'] = position[1]
+      self.df.loc[self.iteration, 'end_z'] = position[2]
+      self.df.loc[self.iteration, 'target_size'] = size
+
+  def _set_end_data_target_hit_time(self):
+      if self.iteration == 0 or self.iteration == (self._max_trials+1):
+          return
+      self.df.loc[self.iteration, 'timestamp_end'] = pd.Timestamp.now()
+
+
+  def _dump_data(self):
+      # How many files are in the directory / for naming the file
+      print('Dumping data...')
+      '''
+      script_directory = os.path.dirname(os.path.abspath(__file__))
+      collection_dir = os.path.join(script_directory, 'CollectedData')
+      if not os.path.exists(collection_dir):
+        os.makedirs(collection_dir)
+      all_items = os.listdir(collection_dir)
+      file_count = sum(1 for item in all_items if os.path.isfile(os.path.join(collection_dir, item)))
+      num = file_count
+      name = 'data' + str(num) + '.csv'
+      
+      # Full path to save the CSV file in the script directory
+      file_path = os.path.join(collection_dir, name)
+      
+      # Save the DataFrame to the specified path
+      self.df.to_csv(file_path)
+      print('Dumped data as ' + name + '!')  
+      '''
+      self.iteration = 0
+      self.df = self.df.drop(self.df.index)
+      
+  #--------------------------------------------------------------------------------
+
   def __init__(self, model, data, end_effector, shoulder, **kwargs):
     super().__init__(model, data, **kwargs)
+     
+    #For collecting data / added by me
+    #------------------------------------------------------------------------
+    self.df = pd.DataFrame(columns=['timestamp_start', 'start_x', 'start_y','start_z', 'timestamp_end', 'end_x', 'end_y', 'end_z', 'target_size'])
+    self.iteration = 0
+    #------------------------------------------------------------------------
 
     # This task requires an end-effector to be defined
     if not isinstance(end_effector, list) and len(end_effector) != 2:
@@ -31,7 +90,7 @@ class Pointing(BaseTask):
 
     # Define a maximum number of trials (if needed for e.g. evaluation / visualisation)
     self._trial_idx = 0
-    self._max_trials = kwargs.get('max_trials', 10)
+    self._max_trials = kwargs.get('max_trials', 40)
     self._targets_hit = 0
 
     # Dwelling based selection -- fingertip needs to be inside target for some time
@@ -93,6 +152,11 @@ class Pointing(BaseTask):
     if dist < self._target_radius:
       self._steps_inside_target += 1
       self._info["inside_target"] = True
+      #Set hit time / added by me
+      #-----------------------------------------------------------------------------------------------------------------
+      if self.iteration != 0:
+        self._set_end_data_target_hit_time()
+      #-----------------------------------------------------------------------------------------------------------------
     else:
       self._steps_inside_target = 0
       self._info["inside_target"] = False
@@ -155,34 +219,106 @@ class Pointing(BaseTask):
     self._info = {"target_hit": False, "inside_target": False, "target_spawned": False,
                   "terminated": False, "truncated": False, "termination": False, "llc_dist_from_target": 0, "dist_from_target": 0, "acc_dist": 0}
 
+    #Added by me
+    #-------------------------------------------------------------------------------------------------------
+    if self.iteration != 0:
+        self._dump_data()
+    self._set_start_data(self._target_origin)
+    #-------------------------------------------------------------------------------------------------------
+      
     # Spawn a new location
     self._spawn_target(model, data)
+    
+    #-------------------------------------------------------------------------------------------------------
+    self._set_end_data_location(self._target_position, self._target_radius)
+    #-------------------------------------------------------------------------------------------------------
 
     return self._info
 
-  def _spawn_target(self, model, data):
+#-----------------------------------------------------------------------------------------------------------
+#added code for ISO-9241-11 / added by me
+  def _determine_Pos(self):
+      #Fixed Parameters
+      num_of_positions_in_circle = 12 #Anzahl verschiedener Target-Positionen in den Kreisen
+      num_of_diff_radius = 3 #Anzahl verschiedener Kreise
+             
+      #Create random values to calculate  angle and radius 
+      r_Angle = np.random.randint(0,num_of_positions_in_circle) #verschiedene Positionen im Kreis 
+      r_Radius = np.random.randint(1,num_of_diff_radius+1) #verschieden breite Kreise
+      
 
+      #Calculate the position of the taregt
+      limit_r = self._target_limits_y[1]
+    
+      rad = r_Radius * (limit_r / num_of_diff_radius)  #Berechnet den gewollten Radius
+      #print(f"rad: {rad} for {self.iteration}")
+      
+      angle_grad = r_Angle * (360 / num_of_positions_in_circle)
+      #print(f"angle_grad: {angle_grad} for {self.iteration}")
+      
+      angle_rad = math.radians(angle_grad)
+      #print(f"angle_rad: {angle_rad} for {self.iteration}")
+      
+      y = rad * math.cos(angle_rad)
+      #print(f"y: {y} for {self.iteration}")
+      
+      z = rad * math.sin(angle_rad)
+      #print(f"z: {z} for {self.iteration}")
+
+      return y,z
+
+  def _determine_Size(self):
+      #Fixed Parameters
+      num_of_diff_target_sizes = 10 #Anzahl verschiedener Targetgrößen
+      
+      #Create a random value to calculate the size of the target
+      r_size = np.random.randint(0,num_of_diff_target_sizes+1) #verschiedene größen für einen Kreis
+      
+      #Calculate the size of the target
+      size = self._target_radius_limit[0] + ((self._target_radius_limit[1] - self._target_radius_limit[0]) / num_of_diff_target_sizes) * r_size      
+
+      return size
+    
+#-----------------------------------------------------------------------------------------------------------
+      
+  def _spawn_target(self, model, data):
+    
+    #Update data management / added by me
+    #-----------------------------------------------------------------------------------------------------
+    self.iteration += 1
+    self._set_start_data(self._target_position)
+    #-----------------------------------------------------------------------------------------------------
+    
     # Sample a location; try 10 times then give up (if e.g. self.new_target_distance_threshold is too big)
     for _ in range(10):
-      target_y = self._rng.uniform(*self._target_limits_y)
-      target_z = self._rng.uniform(*self._target_limits_z)
+      #Legacy code
+      #target_y = self._rng.uniform(*self._target_limits_y)
+      #target_z = self._rng.uniform(*self._target_limits_z)
+
+      target_y, target_z = self._determine_Pos() #generate random y and z values in the determined schema
       new_position = np.array([0, target_y, target_z])
       distance = np.linalg.norm(self._target_position - new_position)
       if distance > self._new_target_distance_threshold:
         break
     self._target_position = new_position
-
+    
     # Set location
     model.body("target").pos[:] = self._target_origin + self._target_position
 
     # Sample target radius
-    self._target_radius = self._rng.uniform(*self._target_radius_limit)
+    self._target_radius = self._determine_Size()
 
     # Set target radius
     model.geom("target").size[0] = self._target_radius
-
+      
+    #Set end data
+    #--------------------------------------------------------------------------------------------------
+    self._set_end_data_location(self._target_position, self._target_radius)
+    #--------------------------------------------------------------------------------------------------
+      
     mujoco.mj_forward(model, data)
-
+    
+    
   def get_stateful_information(self, model, data):
     # Time features (time left to reach target, time spent inside target)
     targets_hit = -1.0 + 2*(self._trial_idx/self._max_trials)
