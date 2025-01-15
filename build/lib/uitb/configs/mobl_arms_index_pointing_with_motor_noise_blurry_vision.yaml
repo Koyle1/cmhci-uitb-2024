@@ -1,4 +1,4 @@
-simulator_name: "mobl_arms_index_pointing_with_motor_noise"
+simulator_name: "mobl_arms_index_pointing_with_motor_noise_blurry_vision"
 
 simulation:
 
@@ -18,7 +18,7 @@ simulation:
         cls: "Identity"
 
   perception_modules:
-    - cls: "vision.FixedEye"
+    - cls: "vision.FixedEyeBlurry"
       kwargs:
         resolution: [120, 80]
         channels: [3]

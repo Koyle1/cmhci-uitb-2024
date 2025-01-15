@@ -68,6 +68,12 @@ class Pointing(BaseTask):
     self.iteration = 0
     #------------------------------------------------------------------------
 
+    #------------------------------------------------------------------------
+    self._ball_position = 0
+    self._ball_radius = 0
+    self._ball_size = 0
+    #------------------------------------------------------------------------
+      
     # This task requires an end-effector to be defined
     if not isinstance(end_effector, list) and len(end_effector) != 2:
       raise RuntimeError("'end_effector' must be a list with two elements: first defining what type of mujoco element "
@@ -90,7 +96,7 @@ class Pointing(BaseTask):
 
     # Define a maximum number of trials (if needed for e.g. evaluation / visualisation)
     self._trial_idx = 0
-    self._max_trials = kwargs.get('max_trials', 40)
+    self._max_trials = kwargs.get('max_trials', 108)
     self._targets_hit = 0
 
     # Dwelling based selection -- fingertip needs to be inside target for some time
@@ -98,7 +104,7 @@ class Pointing(BaseTask):
     self._dwell_threshold = int(0.5*self._action_sample_freq)  #for HRL: int(0.25*self._action_sample_freq)
 
     # Radius limits for target
-    self._target_radius_limit = kwargs.get('target_radius_limit', np.array([0.05, 0.15]))
+    self._target_radius_limit = kwargs.get('target_radius_limit', np.array([0.025, 0.1]))
     self._target_radius = self._target_radius_limit[0]  #for HRL: self._target_radius_limit[1]
 
     # Minimum distance to new spawned targets is twice the max target radius limit
@@ -237,7 +243,7 @@ class Pointing(BaseTask):
 
 #-----------------------------------------------------------------------------------------------------------
 #added code for ISO-9241-11 / added by me
-  def _determine_Pos(self):
+  def _determine_Pos_old(self):
       #Fixed Parameters
       num_of_positions_in_circle = 12 #Anzahl verschiedener Target-Positionen in den Kreisen
       num_of_diff_radius = 3 #Anzahl verschiedener Kreise
@@ -267,7 +273,7 @@ class Pointing(BaseTask):
 
       return y,z
 
-  def _determine_Size(self):
+  def _determine_Size_old(self):
       #Fixed Parameters
       num_of_diff_target_sizes = 10 #Anzahl verschiedener Targetgrößen
       
@@ -278,6 +284,58 @@ class Pointing(BaseTask):
       size = self._target_radius_limit[0] + ((self._target_radius_limit[1] - self._target_radius_limit[0]) / num_of_diff_target_sizes) * r_size      
 
       return size
+
+  def _determine_target(self):
+        
+    #Parameters - Overwrite if needed
+    numBalls = 12
+    numRadius = 3
+    numSizes = 3
+    #--------------------------------
+    if self._ball_position == numBalls:
+        self._ball_radius += 1
+        self._ball_position = 0
+
+    if self._ball_radius == numRadius:
+        self._ball_size += 1
+        self._ball_radius = 0
+
+    if self._ball_size == numSizes:
+        self._ball_size = 0
+     
+    cPosition = self._ball_position
+    cRadius = self._ball_radius
+    cSize = self._ball_size
+
+    cAngle = self.calculatePos(cPosition, ( numBalls / 2 ), ( numBalls / 2 ) - 1)
+    limit_r = self._target_limits_y[1]
+        
+    rad = (cRadius + 1) * (limit_r / numRadius)
+    angle_grad = (cAngle + 1) * (360 / numBalls)
+    angle_rad = math.radians(angle_grad)
+    y = rad * math.cos(angle_rad)
+    z = rad * math.sin(angle_rad)
+        
+    size = self._target_radius_limit[0] + ((self._target_radius_limit[1] - self._target_radius_limit[0]) / numSizes) * cSize     
+    self._ball_position += 1
+    return y,z,size
+
+  def calculatePos(self, iterations, sf, sb):
+    """
+        Führt iterativ die Operationen +5 und -6 aus.
+    
+        :param start: Der Startwert (int oder float).
+        :param iterations: Anzahl der Iterationen (int).
+        :return: Endwert nach allen Iterationen.
+    """
+    result = 0 
+    for i in range(iterations):
+        if i % 2 == 0:  # Bei geraden Iterationen +5
+            result += sf
+        else:  # Bei ungeraden Iterationen -6
+            result -= sb
+    return result
+        
     
 #-----------------------------------------------------------------------------------------------------------
       
@@ -290,23 +348,26 @@ class Pointing(BaseTask):
     #-----------------------------------------------------------------------------------------------------
     
     # Sample a location; try 10 times then give up (if e.g. self.new_target_distance_threshold is too big)
-    for _ in range(10):
+    '''
+      for _ in range(10):
       #Legacy code
       #target_y = self._rng.uniform(*self._target_limits_y)
       #target_z = self._rng.uniform(*self._target_limits_z)
-
-      target_y, target_z = self._determine_Pos() #generate random y and z values in the determined schema
-      new_position = np.array([0, target_y, target_z])
-      distance = np.linalg.norm(self._target_position - new_position)
+    '''
+    target_y, target_z, size = self._determine_target() #generate random y and z values in the determined schema
+    new_position = np.array([0, target_y, target_z])
+    distance = np.linalg.norm(self._target_position - new_position)
+    '''
       if distance > self._new_target_distance_threshold:
         break
+    '''
     self._target_position = new_position
     
     # Set location
     model.body("target").pos[:] = self._target_origin + self._target_position
 
     # Sample target radius
-    self._target_radius = self._determine_Size()
+    self._target_radius = size
 
     # Set target radius
     model.geom("target").size[0] = self._target_radius
@@ -314,6 +375,7 @@ class Pointing(BaseTask):
     #Set end data
     #--------------------------------------------------------------------------------------------------
     self._set_end_data_location(self._target_position, self._target_radius)
+    
     #--------------------------------------------------------------------------------------------------
       
     mujoco.mj_forward(model, data)
