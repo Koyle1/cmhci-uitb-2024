@@ -22,7 +22,6 @@ class Pointing(BaseTask):
   def _set_end_data_location(self, position, size):
       if self.iteration == 0 or self.iteration == (self._max_trials+1):
           return
-      self.df.loc[self.iteration, 'timestamp_start'] = pd.Timestamp.now()
       self.df.loc[self.iteration, 'end_x'] = position[0]
       self.df.loc[self.iteration, 'end_y'] = position[1]
       self.df.loc[self.iteration, 'end_z'] = position[2]
@@ -31,13 +30,13 @@ class Pointing(BaseTask):
   def _set_end_data_target_hit_time(self):
       if self.iteration == 0 or self.iteration == (self._max_trials+1):
           return
-      self.df.loc[self.iteration, 'timestamp_end'] = pd.Timestamp.now()
+      self.df.loc[self.iteration, 'timestamp_end'] = self._steps_since_last_hit
 
 
   def _dump_data(self):
       # How many files are in the directory / for naming the file
       print('Dumping data...')
-      '''
+      
       script_directory = os.path.dirname(os.path.abspath(__file__))
       collection_dir = os.path.join(script_directory, 'CollectedData')
       if not os.path.exists(collection_dir):
@@ -53,7 +52,6 @@ class Pointing(BaseTask):
       # Save the DataFrame to the specified path
       self.df.to_csv(file_path)
       print('Dumped data as ' + name + '!')  
-      '''
       self.iteration = 0
       self.df = self.df.drop(self.df.index)
       
@@ -64,7 +62,7 @@ class Pointing(BaseTask):
      
     #For collecting data / added by me
     #------------------------------------------------------------------------
-    self.df = pd.DataFrame(columns=['timestamp_start', 'start_x', 'start_y','start_z', 'timestamp_end', 'end_x', 'end_y', 'end_z', 'target_size'])
+    self.df = pd.DataFrame(columns=['start_x', 'start_y','start_z', 'timestamp_end', 'end_x', 'end_y', 'end_z', 'target_size'])
     self.iteration = 0
     #------------------------------------------------------------------------
 
@@ -159,10 +157,6 @@ class Pointing(BaseTask):
       self._steps_inside_target += 1
       self._info["inside_target"] = True
       #Set hit time / added by me
-      #-----------------------------------------------------------------------------------------------------------------
-      if self.iteration != 0:
-        self._set_end_data_target_hit_time()
-      #-----------------------------------------------------------------------------------------------------------------
     else:
       self._steps_inside_target = 0
       self._info["inside_target"] = False
@@ -173,6 +167,7 @@ class Pointing(BaseTask):
       self._info["target_hit"] = True
       self._trial_idx += 1
       self._targets_hit += 1
+      self._set_end_data_target_hit_time()
       self._steps_since_last_hit = 0
       self._steps_inside_target = 0
       self._info["acc_dist"] += dist
@@ -187,6 +182,9 @@ class Pointing(BaseTask):
       self._steps_since_last_hit += 1
       if self._steps_since_last_hit >= self._max_steps_without_hit:
         # Spawn a new target
+        #-----------------------------------------------------------------------------------------------------------------
+        self._set_end_data_target_hit_time()
+        #-----------------------------------------------------------------------------------------------------------------
         self._steps_since_last_hit = 0
         self._trial_idx += 1
         self._info["acc_dist"] += dist
@@ -198,7 +196,10 @@ class Pointing(BaseTask):
       self._info["dist_from_target"] = self._info["acc_dist"]/self._trial_idx
       truncated = True
       self._info["termination"] = "max_trials_reached"
-
+        
+      #-----------------------------------------------------------------------------------------------------------------
+      self._dump_data()
+      #-----------------------------------------------------------------------------------------------------------------
     # Calculate reward; note, inputting distance to surface into reward function, hence distance can be negative if
     # fingertip is inside target
     reward = self._reward_function.get(self, dist-self._target_radius, self._info.copy())
@@ -227,8 +228,6 @@ class Pointing(BaseTask):
 
     #Added by me
     #-------------------------------------------------------------------------------------------------------
-    if self.iteration != 0:
-        self._dump_data()
     self._set_start_data(self._target_origin)
     #-------------------------------------------------------------------------------------------------------
       

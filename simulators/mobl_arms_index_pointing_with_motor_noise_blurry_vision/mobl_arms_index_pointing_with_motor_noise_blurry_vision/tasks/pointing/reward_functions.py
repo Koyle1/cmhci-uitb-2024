@@ -79,7 +79,7 @@ class NegativeExpDistanceWithHitBonus(BaseFunction):
     self.k = k
 
   def get(self, env, dist, info):
-    if info["target_hit"]:
+    if info["target_hit"]: #Warum wenn target hit? -> besserer score wenn am Rand gezittert wird
       return 8
     elif info["inside_target"]:
       return 0

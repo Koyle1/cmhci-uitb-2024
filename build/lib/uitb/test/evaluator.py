@@ -75,7 +75,6 @@ if __name__ == "__main__":
     parser.add_argument('--action_log_file', default='action_log',
                         help='output file for action log if logging is enabled (default: ./action_log)')
     args = parser.parse_args()
-
     # Define directories
     checkpoint_dir = os.path.join(args.simulator_folder, 'checkpoints')
     evaluate_dir = os.path.join(args.simulator_folder, 'evaluate')
@@ -96,7 +95,8 @@ if __name__ == "__main__":
     # run_params["unity_random_seed"] = 123
 
     # Embed visual observations into main mp4 or store as separate mp4 files
-    render_mode_perception = "separate" if run_params["unity_record_gameplay"] else "embed"
+    #render_mode_perception = "separate" if run_params["unity_record_gameplay"] else "embed"
+    render_mode_perception = "embed"
 
     # Use deterministic actions?
     deterministic = False
@@ -177,6 +177,7 @@ if __name__ == "__main__":
                 state.update(info)
                 state_logger.log(episode_idx, state)
 
+            
         # print(f"Episode {episode_idx}: {simulator.get_episode_statistics_str()}")
 
         # episode_statistics = simulator.get_episode_statistics()
@@ -199,6 +200,7 @@ if __name__ == "__main__":
         # Write the video
         # simulator._camera.write_video(imgs, os.path.join(evaluate_dir, args.out_file))
         _imgs = simulator.render()
+        #_imgs = simulator._GUI_rendering() #Changed Function call for Picture-in-Picture
         for _img in _imgs:
             simulator._GUI_camera.write_video_add_frame(_img)
 

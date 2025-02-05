@@ -3,6 +3,8 @@ import numpy as np
 import mujoco
 from collections import deque
 import cv2
+import os
+import matplotlib.pyplot as plt
 
 from ...base import BaseModule
 from ....utils.rendering import Camera
@@ -46,6 +48,10 @@ class FixedEyeBlurry(BaseModule):
     self._pos = pos
     self._quat = quat
     self._body = body
+
+    #limit of images
+    self.obs_save_limit = 10
+    self.obs_save_number = 0
 
     # Get rendering context
     if "rendering_context" not in kwargs:
@@ -170,10 +176,6 @@ class FixedEyeBlurry(BaseModule):
     rgb = obs[0:3, :, :]  # RGB channels
     depth = obs[3, :, :]  # Depth channel
 
-    # Debug: Print original shapes
-    print(f"Original RGB shape: {rgb.shape}")
-    print(f"Original Depth shape: {depth.shape}")
-
     # Convert RGB to [height, width, channels] for OpenCV
     rgb = np.transpose(rgb, (1, 2, 0))  # Shape: [height, width, 3]
 
@@ -188,11 +190,30 @@ class FixedEyeBlurry(BaseModule):
     rgb_blurred = np.transpose(rgb_blurred, (2, 0, 1))  # Shape: [3, height, width]
     depth_blurred = np.expand_dims(depth_blurred, axis=0)  # Shape: [1, height, width]
 
-    # Debug: Print blurred shapes
-    print(f"Blurred RGB shape: {rgb_blurred.shape}")
-    print(f"Blurred Depth shape: {depth_blurred.shape}")
-
     # Combine RGB and depth
     blurred_obs = np.concatenate([rgb_blurred, depth_blurred], axis=0)  # Shape: [4, height, width]
-
+    self.save_observation(obs)
+    self.save_observation(blurred_obs)
     return blurred_obs
+
+  def save_observation(self, obs):
+      if self.obs_save_number >= self.obs_save_limit:
+          return
+      # Transpose from (channels, height, width) -> (height, width, channels)
+      obs = np.transpose(obs, (1, 2, 0))
+      # If there are 4 channels (RGB + Depth), remove the depth channel
+      if obs.shape[-1] == 4:
+          obs = obs[:, :, :3]  # Keep only the first 3 channels (RGB)
+      print(f"Observation shape: {obs.shape}, dtype: {obs.dtype}")  # Debugging print
+      
+      if obs.dtype in [np.float32, np.float64]:  # Check if it's a float image
+          obs = np.clip(obs, 0, 1)  # Ensure values are within 0-1 range
+      script_directory = os.path.dirname(os.path.abspath(__file__))
+      path = os.path.join(script_directory, 'obs_dir')
+      name = f"obs_{self.obs_save_number}.png"
+      path_obs = os.path.join(path, name)
+      if not os.path.exists(path):
+        os.makedirs(path)
+      plt.imsave(path_obs, obs)
+      self.obs_save_number += 1
+      return

@@ -660,6 +660,7 @@ class Simulator(gym.Env):
 
     return self.get_observation(), info
 
+  
   def render(self):
     if self._render_mode == "rgb_array_list":
       render_stack = self._render_stack
@@ -671,6 +672,38 @@ class Simulator(gym.Env):
     else:
       return None
     
+        
+  '''
+  def render(self):
+    if self._render_mode == "rgb_array_list":
+      render_stack = self._render_stack
+      if self._render_stack_pop:
+        self._render_stack = []
+      return render_stack
+        
+    elif self._render_mode == "rgb_array":
+      img = self._GUI_rendering()
+      ocular_img = None
+      for module in self.perception.perception_modules:
+          if module.modality == "vision":
+              ocular_img, _ = module._camera.render()
+              break
+              
+      if ocular_img is not None:
+          resample_factor = 2
+          resample_height = ocular_img.shape[0] * resample_factor
+          resample_width = ocular_img.shape[1] * resample_factor
+          resampled_img = np.zeros((resample_height, resample_width, 3), dtype=np.uint8)
+          for channel in range(3):
+              resampled_img[:, :, channel] = scipy.ndimage.zoom(ocular_img[:, :, channel], resample_factor, order=0)
+
+          i = img.shape[0] - resample_height
+          j = img.shape[1] - resample_width
+          img[i:, j:] = resampled_img
+
+      return image
+  '''
+
   def get_render_stack_perception(self):
       render_stack_perception = self._render_stack_perception
       # if self._render_stack_pop:
